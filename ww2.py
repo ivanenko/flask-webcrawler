@@ -163,9 +163,9 @@ def index_page():
     html = '''
         <html><head><title>Flask web-crawler</title></head>
         <body>
-            <form method="POST" action="/download/">
+            <div style="width:50%;margin: 0 auto;margin-top:100px;"><form method="POST" action="/download/">
                 Enter URL here: <input type="text" name="url" /><input type="submit" value="Submit" />
-            </form>
+            </form></div>
         </body>
         </html>
         '''
@@ -201,4 +201,4 @@ if __name__ == '__main__':
     if len(args) > 0:
         process_parsing(args[0], sys.stdout)
     else:
-        app.run(debug=True)
+        app.run()
