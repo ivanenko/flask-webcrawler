@@ -18,6 +18,7 @@ import json, io
 from multiprocessing.dummy import Pool as ThreadPool
 from multiprocessing import Queue as ProcessQueue
 import StringIO
+import logging
 
 NUMBER_PROCESSES = 8
 
@@ -50,7 +51,7 @@ def parse_company_worker(param):
                 result[field_name] = default
 
     def parse_request(url, output):
-        print url
+        logging.info(url)
         result = {}
         r = requests.get(url)
         text = re.sub("\n|\r", '', r.text)
@@ -94,7 +95,7 @@ def collect_company_urls(param):
             r = requests.get(param[0] + '?page=%s' % (i + 2))
             urls_page = re.findall(pt_companies, r.text)
             urls.extend(urls_page)
-        print match.group(1), len(urls), param[0]
+        logging.info('%s %d %s' % (match.group(1), len(urls), param[0]))
         for u in urls:
             param[1].put_nowait(u)
     else:
@@ -106,7 +107,7 @@ def process_parsing(url, output_stream):
     url_prefix = 'http://www.yell.ru'
     r = requests.get(url)
     metro_urls = get_metro_stations(r.text)
-    print "metroes: ", len(metro_urls)
+    logging.info("metroes: %d" % len(metro_urls))
 
     # collect company urls for parsing
     pool = ThreadPool(NUMBER_PROCESSES)
@@ -126,18 +127,18 @@ def process_parsing(url, output_stream):
         #if count < 10:
         reduced_url_set.add(url)
 
-    print count
-    print len(reduced_url_set)
+    logging.info("%d" % count)
+    logging.info("%d" % len(reduced_url_set))
 
     # start company parsing pool ----
-    print 'start!!!!!!'
+    logging.info('start!!!!!!')
     pool = ThreadPool(NUMBER_PROCESSES)
     output_queue = ProcessQueue()
     results = pool.map(parse_company_worker, [(url_prefix + u, output_queue) for u in reduced_url_set])
     pool.close()
     pool.join()
     pool.terminate()
-    print 'done!!!!!'
+    logging.info('done!!!!!')
 
     # --- write results in CSV file
 
@@ -150,10 +151,10 @@ def process_parsing(url, output_stream):
         rec = output_queue.get_nowait()
         for field in fields:
             value = rec.get(field, '')
-            output_stream.write(value.encode('cp1251') + ';')
+            output_stream.write(value.encode('utf-8') + ';')
         output_stream.write('\n')
 
-    print 'finished'
+    logging.info('finished')
 
 
 app = Flask(__name__)
@@ -185,6 +186,7 @@ def perform_parsing():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(filename='ww2.log', filemode='w', level=logging.INFO)
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'h', ['help'])
     except getopt.error, msg:
