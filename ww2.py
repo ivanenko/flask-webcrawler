@@ -21,7 +21,7 @@ import StringIO
 import logging
 
 NUMBER_PROCESSES = 8
-
+FIELDS = ['name', 'addr', 'rating', 'phone', 'more_phones']
 
 def get_metro_stations(text):
     ''' get metro station urls from page '''
@@ -67,7 +67,12 @@ def parse_company_worker(param):
         get_text(pt_descr, text, result, 'descr')
         get_text(pt_raion, text, result, 'raion')
 
-        output.put(result, block=False)
+        #output.put(result, block=False)
+        for field in FIELDS:
+            value = result.get(field, '')
+            output.write(value.encode('utf-8') + ';')
+        output.write('\n')
+        #output.append(result)
 
     pt_name = re.compile('<h1 itemprop="name">(.*?)</h1>', re.DOTALL)
     pt_raiting = re.compile('<span class="rating__value"\s+itemprop="ratingValue">(.*?)</span>')
@@ -78,7 +83,10 @@ def parse_company_worker(param):
     pt_raion = re.compile(
         u'<div class="company__contacts-item is-white-space-nowrap"><span class="company__contacts-item-label">Район: </span><span class="company__contacts-item-text">(.*?)</span></div>')
 
-    parse_request(param[0], param[1])
+    try:
+        parse_request(param[0], param[1])
+    except:
+        logging.error('error getting data for: %s' % param[0])
 
 
 def collect_company_urls(param):
@@ -99,7 +107,7 @@ def collect_company_urls(param):
         for u in urls:
             param[1].put_nowait(u)
     else:
-        param[1].put_nowait('error ---------------------')
+        logging.error("cannot collect pages data for: %s" % param[0])
 
 
 def process_parsing(url, output_stream):
@@ -132,30 +140,20 @@ def process_parsing(url, output_stream):
 
     # start company parsing pool ----
     logging.info('start!!!!!!')
-    pool = ThreadPool(NUMBER_PROCESSES)
-    output_queue = ProcessQueue()
-    results = pool.map(parse_company_worker, [(url_prefix + u, output_queue) for u in reduced_url_set])
-    pool.close()
-    pool.join()
-    pool.terminate()
-    logging.info('done!!!!!')
+    #pool = ThreadPool(NUMBER_PROCESSES)
+    #output_queue = ProcessQueue()
 
-    # --- write results in CSV file
-
-    #fields = ['name', 'addr', 'rating', 'phone', 'more_phones', 'descr', 'raion']
-    fields = ['name', 'addr', 'rating', 'phone', 'more_phones']
-    for field in fields:
+    for field in FIELDS:
         output_stream.write(field + ';')
     output_stream.write('\n')
-    while not output_queue.empty():
-        rec = output_queue.get_nowait()
-        for field in fields:
-            value = rec.get(field, '')
-            output_stream.write(value.encode('utf-8') + ';')
-        output_stream.write('\n')
-
+    for curl in reduced_url_set:
+        parse_company_worker((url_prefix+curl, output_stream))
+    # results = pool.map(parse_company_worker, [(url_prefix + u, output_queue) for u in reduced_url_set])
+    # pool.close()
+    # pool.join()
+    # pool.terminate()
+    logging.info('done!!!!!')
     logging.info('finished')
-
 
 app = Flask(__name__)
 
@@ -203,4 +201,4 @@ if __name__ == '__main__':
     if len(args) > 0:
         process_parsing(args[0], sys.stdout)
     else:
-        app.run()
+        app.run(host='0.0.0.0')
