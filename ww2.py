@@ -200,5 +200,6 @@ if __name__ == '__main__':
 
     if len(args) > 0:
         process_parsing(args[0], sys.stdout)
+        sys.stdout.flush()
     else:
         app.run(host='0.0.0.0')
