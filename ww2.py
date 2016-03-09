@@ -10,8 +10,8 @@ You can see web form to enter URL on you browser:
 http://127.0.0.1:5000
 You can download output file after parser finish
 '''
-import Queue
-from threading import Thread
+import threading
+import time
 import requests, re, sys, getopt
 from flask import Flask, request, make_response
 import json, io
@@ -22,6 +22,7 @@ import logging
 
 NUMBER_PROCESSES = 8
 FIELDS = ['name', 'addr', 'rating', 'phone', 'more_phones']
+LOCK = threading.RLock()
 
 def get_metro_stations(text):
     ''' get metro station urls from page '''
@@ -41,6 +42,8 @@ def get_metro_stations(text):
 
 def parse_company_worker(param):
     ''' parse single company page and put result info into Queue '''
+
+    global LOCK
 
     def get_text(pattern, text, result, field_name, default=None):
         match = pattern.search(text)
@@ -67,12 +70,12 @@ def parse_company_worker(param):
         get_text(pt_descr, text, result, 'descr')
         get_text(pt_raion, text, result, 'raion')
 
-        #output.put(result, block=False)
+        LOCK.acquire()
         for field in FIELDS:
             value = result.get(field, '')
             output.write(value.encode('utf-8') + ';')
         output.write('\n')
-        #output.append(result)
+        LOCK.release()
 
     pt_name = re.compile('<h1 itemprop="name">(.*?)</h1>', re.DOTALL)
     pt_raiting = re.compile('<span class="rating__value"\s+itemprop="ratingValue">(.*?)</span>')
@@ -112,6 +115,7 @@ def collect_company_urls(param):
 
 def process_parsing(url, output_stream):
     # url='http://www.yell.ru/spb/top/restorany/'
+    time_start = time.time()
     url_prefix = 'http://www.yell.ru'
     r = requests.get(url)
     metro_urls = get_metro_stations(r.text)
@@ -140,20 +144,17 @@ def process_parsing(url, output_stream):
 
     # start company parsing pool ----
     logging.info('start!!!!!!')
-    #pool = ThreadPool(NUMBER_PROCESSES)
-    #output_queue = ProcessQueue()
+    pool = ThreadPool(NUMBER_PROCESSES)
 
     for field in FIELDS:
         output_stream.write(field + ';')
     output_stream.write('\n')
-    for curl in reduced_url_set:
-        parse_company_worker((url_prefix+curl, output_stream))
-    # results = pool.map(parse_company_worker, [(url_prefix + u, output_queue) for u in reduced_url_set])
-    # pool.close()
-    # pool.join()
-    # pool.terminate()
+    results = pool.map(parse_company_worker, [(url_prefix + u, output_stream) for u in reduced_url_set])
+    pool.close()
+    pool.join()
+    pool.terminate()
     logging.info('done!!!!!')
-    logging.info('finished')
+    logging.info('finished in %s seconds' % (time.time() - time_start))
 
 app = Flask(__name__)
 
